@@ -1,1 +1,102 @@
+from gtts import gTTS
+import pygame
+import threading
+import time
+import speech_recognition as sr
+
+# Global variables to control the audio state
+playback_control = {
+    "play": True,
+    "pause": False,
+    "stop": False
+}
+current_position = 0
+
+def text_to_audio(text_file, audio_file):
+    global current_position
+
+    # Read the text file
+    with open(text_file, 'r') as file:
+        text = file.read()
+    
+    # Convert text to audio
+    tts = gTTS(text)
+    tts.save(audio_file)
+    
+    # Initialize pygame mixer
+    pygame.mixer.init()
+    
+    # Load the audio file
+    pygame.mixer.music.load(audio_file)
+    
+    while True:
+        if playback_control["play"] and not playback_control["pause"] and not playback_control["stop"]:
+            # Start or resume playing the audio file
+            pygame.mixer.music.play(start=current_position)
+            start_time = time.time()
+            
+            while pygame.mixer.music.get_busy():
+                if playback_control["pause"]:
+                    pygame.mixer.music.pause()
+                    current_position += time.time() - start_time
+                    break
+                elif playback_control["stop"]:
+                    pygame.mixer.music.stop()
+                    current_position = 0
+                    break
+                time.sleep(0.1)
+        
+        if playback_control["stop"]:
+            break
+        
+        time.sleep(0.1)
+
+def voice_control_audio():
+    recognizer = sr.Recognizer()
+    microphone = sr.Microphone()
+
+    with microphone as source:
+        recognizer.adjust_for_ambient_noise(source)
+
+    while True:
+        with microphone as source:
+            print("Listening for commands...")
+            audio = recognizer.listen(source, phrase_time_limit=5)
+
+        try:
+            command = recognizer.recognize_google(audio).strip().lower()
+            print(f"Command received: {command}")
+            if command == "play":
+                playback_control["play"] = True
+                playback_control["pause"] = False
+            elif command == "pause":
+                playback_control["pause"] = True
+            elif command == "stop":
+                playback_control["stop"] = True
+                break
+            elif command == "exit":
+                playback_control["stop"] = True
+                break
+        except sr.UnknownValueError:
+            print("Sorry, I didn't catch that. Please try again.")
+        except sr.RequestError as e:
+            print(f"Could not request results from Google Speech Recognition service; {e}")
+        
+        time.sleep(0.1)
+
+# Specify the text file and the output audio file
+text_file = 'text.txt'
+audio_file = 'output.mp3'
+
+# Start the audio playback in a separate thread
+audio_thread = threading.Thread(target=text_to_audio, args=(text_file, audio_file))
+audio_thread.start()
+
+# Handle voice input in another thread
+voice_thread = threading.Thread(target=voice_control_audio)
+voice_thread.start()
+
+# Wait for both threads to finish
+audio_thread.join()
+voice_thread.join()
 
